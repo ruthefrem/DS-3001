@@ -111,8 +111,10 @@ table(xx$salary)
 
 ```{r}
 #5 Determine the baserate or prevalence for the classifier, 
-# what does this number mean?  
+# what does this number mean?
 ```
+
+According to the prevalence given further into this code in the confusion matrix, the prevalence is 0.76. Prevalence gives us an indication of the balance of the data set. This means that 76 percent of people are making less than 50,000 dollars a year and 24 percent are making more than or equal to 50,000 dollars per year.
 
 ```{r}
 #6 Split your data into test, tune, and train. (70/15/15)
@@ -142,7 +144,7 @@ dim(tune)
 # double check to make sure you are using a cross-validation training approach
 
 # Choose the features and classes
-features <- train[,c(-8:-11)]#dropping 11 which is the target variable, salary
+features <- train[,c(-2,-8:-11)]#dropping these columns which includes target variable, salary
 
 target <- train$salary
 str(features)
@@ -176,16 +178,8 @@ xx_mdl <- train(x=features,
                 tuneGrid=grid,
                 trControl=fitControl,
                 verbose=TRUE)
+
 xx_mdl #provides us the hyper-parameters that were selected through the grid
-# search process. 
-View(xx_mdl$pred)
-# visualize the re-sample distributions
-xyplot(xx_mdl,type = c("g", "p", "smooth"))
-varImp(xx_mdl)
-# education-num, marital-status,age, and capital-gain, and capital-loss are the best ones to use
-
-
-
 
 
 
@@ -193,9 +187,12 @@ varImp(xx_mdl)
 
 ```{r}
 #8 View the results, what is the most important variable for the tree?
-education-num
-# is this how many years total or after high school?
+
+varImp(xx_mdl)
+
 ```
+
+The variables : education-num, marital-status,age,capital-gain, and capital-loss are the best ones to use
 
 ```{r}
 #9 Plot the output of the model to see the tree visually 
@@ -213,6 +210,7 @@ View(xx_mdl$pred)
 xyplot(xx_mdl,type = c("g", "p", "smooth"))
 ```
 
+
 ```{r}
 #10 Use the validation set and the predict function with your model to the
 # estimate the target variable.
@@ -221,33 +219,144 @@ xyplot(xx_mdl,type = c("g", "p", "smooth"))
 ```{r}
 #11 Compare the predicted values to those of the actual by generating a 
 # matrix ("by-hand").
+
+xx_eval <-(predict(xx_mdl,newdata = test))#generates 2 salary categories
+View(xx_eval)
+
+xx_eval_prob <- predict(xx_mdl, newdata = test, type = "prob")#this gives us the predicted prob, we will need these later for the fairness evaluation
+View(xx_eval_prob)
+
+View(test$salary)
+table(xx_eval, test$salary)
+
+xx_eval_prob$test <- test$salary
+
+View(xx_eval_prob)
+
+(error = mean(xx_eval != test$salary))
+
+
+
+
+# is this "by hand" ?---> 87%
 ```
+
 
 ```{r}
 #12 Use the the confusion matrix function to check a variety of metrics 
 # and comment on the metric that might be best for this type of analysis given your question.  
+
+#xx_pred_tune = predict(xx_mdl,tune, type= "raw")
+#View(as_tibble(xx_pred_tune))
+#Lets use the confusion matrix
+(xx_eval <- confusionMatrix(as.factor(xx_pred_tune), 
+                as.factor(tune$salary), 
+                dnn=c("Prediction", "Actual"), 
+                mode = "sens_spec"))
+table(tune$salary)
+(xx_pred_tune_p = predict(xx_mdl,tune,type= "prob"))
+
 ```
+
+The metric that might be best for this type of analysis is...
+
+-predicted positive class rate (precision)
+-specificity, unbalanced : use F1
+-never bad to look at log loss
 
 ```{r}
 #13 Generate a ROC and AUC output, interpret the results
+
+library(ROCR)
+
+xx_pred_tune = predict(xx_mdl,tune, type= "raw")
+View(as_tibble(xx_pred_tune))
+
+table(tune$salary)
+(xx_pred_tune_p = predict(xx_mdl,tune,type= "prob"))
+View(xx_pred_tune_p)
+
+xx_eval <- tibble(pred_class= xx_pred_tune, pred_prob=xx_pred_tune_p$`1`,target=as.numeric(test$salary))
+
+View(xx_eval)
+
+
 ```
 
+
+##############
+```{r}
+#Pulling out the probabilities  
+xx_prob <- tibble(attr(xx_mdl, "prob"))
+
+#Prob that are mixed
+View(xx_prob)
+
+#Building a dataframe includes the columns 
+final_model <- tibble(k_prob=titanic_prob$`attr(titanic_3NN, "prob")`,pred=titanic_3NN,target=tune$`survived`)
+
+View(final_model)
+
+#Need to convert this to the likelihood to be in the poss class.
+pos_prec <- ifelse(final_model$pred == 0, 1-final_model$k_prob, final_model$k_prob)
+```
+##################
+
+
+
+###                         IGNORE FOR NOW
 ```{r}
 #14 Use the predict function to generate percentages, then select several 
 # different threshold levels using the confusion matrix function and 
 # interpret the results. What patterns did you notice, did the evaluation metrics change? 
+
+adjust_thres <- function(x, y, z) {
+  #x=pred_probablities, y=threshold, z=test_outcome
+  thres <- as.factor(ifelse(x > y, 1,0))
+  confusionMatrix(thres, z, positive = "1" , dnn=c("Prediction", "Actual"), mode = "everything")
+}
+
+str(test$salary)
+
+adjust_thres(xx_eval_prob$`>50K`, .60, test$salary) #Not much changes here because of the high probability splits of the data outcomes. Let's take a closer look. We can see that the algo isn't marginally mis-classifying these rows, it's very confidently wrong. Which likely means that there's too much emphasis being placed on too small a number of variables, principally the funfetti variable. 
+
+xx_eval_prob$test <- test$salary
+
+View(xx_eval_prob)
+
+(error = mean(loan_eval != test$salary))#overall error rate, on average when does our prediction not match the actual, looks like around 15%, really just ok. 
+
+
+
+
+
 ```
+
 
 ```{r}
 #15 Based on your understanding of the model and data adjust several of the hyper-parameters via the built in train control function in caret or build and try new features, does the model quality improve? If so how and why, if not, why not?
 # Use this link: https://rdrr.io/cran/caret/man/trainControl.html to select changes,
 # you aren't expected to understand all these options but explore one or two and 
 # see what happens. 
+
+
 ```
+
 
 ```{r}
 #16 Once you are confident that your model is not improving, via changes 
-# implemented on the training set and evaluated on the the validation set (item 16), predict with the test set and report a final evaluation of the model. Discuss the output in comparison with the previous evaluations.  
+# implemented on the training set and evaluated on the the validation set (item 16), predict with the test set and report a final evaluation of the model. Discuss the output in comparison with the previous evaluations. 
+
+wine_pred_test = predict(wine_mdl_2,test, type= "raw")
+View(as_tibble(wine_pred_test))
+#Lets use the confusion matrix
+confusionMatrix(as.factor(wine_pred_test), 
+                as.factor(test$text_rank), 
+                dnn=c("Prediction", "Actual"), 
+                mode = "sens_spec")
+(wine_pred_tune_p = predict(wine_mdl,test,type= "prob"))
+
+
 ```
 
 ```{r}
