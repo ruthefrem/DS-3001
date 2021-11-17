@@ -1,0 +1,64 @@
+---
+title: "Random Forest Notes"
+output: html_notebook
+---
+Ensemble methods are more or less aggregated prediction of many different algorithms in order to increase predictive accuracy
+--> bagging and boosting 
+
+bootstrapping = taking many samples of intervals and calculating confidence intervals, give better approximation of your data you are trying to find 
+
+boosting = choosing variables, random number of variables and making a tree, sample variables contributing to error reduction at a higher rate 
+
+Hard voting = aggregate ...
+soft voting = percentage
+
+- works better than using single weak learners or algs that predict that use only slightly better than random guessing 
+
+
+- the more repetition, the more likely of getting a true value
+
+What is enough (in terms of repetition)? --> 
+
+
+variable importance = passing data from out of bag error into the tree, sums that up over hundred of trees and give you average of particular importnace of the variable 
+
+
+
+
+Tree Base Boosting, Bagging, and Random Forest
+- bagging : goal is to reduce complexity of models that have a tendancy to overfit 
+- uses majority vote to reduce variance by creating simpler decision values, boosting reduces bias (underfitting)
+
+
+Sampling with replacement = dumping water back into the well
+- sampling without replacement would get you the same dataset
+- with replacment you get variance in terms of how the models are learning
+
+- bagging model but uses random bootstrapped samples 
+- draws random subset features 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
