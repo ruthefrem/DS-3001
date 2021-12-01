@@ -1,6 +1,6 @@
 ---
 title: "Random_Forest_Lab"
-author: "Brian Wright"
+author: "Ruth Efrem"
 date: "11/16/2020"
 output: html_document
 editor_options: 
@@ -9,6 +9,19 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+
+library(rio)
+library(tidyverse)
+library(randomForest)
+#library(help = randomForest)
+library(tidyverse)
+library(psych)
+library(mltools)
+library(data.table)
+library(caret)
+library(tidyr)
+
 ```
 
 The goal of this lab is to optimize a Random Forest model using the same dataset from last week and then compare the results from the C5.0 method to the Random Forest method. The guidance this week is less prescriptive in terms of steps, so use the skills you have gained over the semester to build and evaluate the RF model and determine if the RF is a better approach or not. You will be graded on your model building, interpretation of the results and explanation of model selection. As always, rely on your teams but submit your own code. Lastly, there are likely several correct approaches involving a variety of different conclusions, just make sure your conclusions are supported by your approach.    
@@ -33,51 +46,241 @@ View(census)
 Recode the target variable to set the above 50k to 1 and below to 0, should already
 be done. 
 ```{r}
+library(dplyr)
+
+library(dplyr)
+census <- census%>%
+      mutate(income = ifelse(income == "<=50K",0,1))
+
+census$income = as.factor(census$income)
+
+View(census)
+str(census)
 
 ```
 
 Ensure that the variables are correctly classified (should already be done)
 ```{r}
+
+str(census)
+
+census$income = as.factor(census$income)
+census$workclass = as.factor(census$workclass)
+census$sex = as.factor(census$sex)
+census$race = as.factor(census$race)
+census$relationship= as.factor(census$relationship)
+census$native_country= as.factor(census$native_country)
+census$marital_status= as.factor(census$marital_status)
+census$education = as.factor(census$education)
+census$occupation = as.factor(census$occupation)
+
+
+str(census)
+table(census$income)
+
+
+
 ```
 
-Finish any other data prep (one-hot encode, reduce factor levels)
+Finish any other data prep (one-hot encode, reduce factor levels) and Create test, tune and training sets 
 ```{r}
 
+census_1h <- one_hot(as.data.table(census),cols = "auto",sparsifyNAs = TRUE,naCols = TRUE,dropCols = TRUE,dropUnusedLevels = TRUE) 
+
+View(census_1h)
+
+census_factors = as.tibble(apply(census,                 #<- the data set to apply the function to
+                          2,                         #<- for each column
+                          function(x) as.factor(x)))  #<- change each variable to factor
+str(census_factors)
+View(census_factors)
+
+sample_rows = 1:nrow(census_factors)
+sample_rows
+
+set.seed(1984) #sample(x, size, replace = FALSE, prob = NULL)
+test_rows = sample(sample_rows,
+                   dim(census_1h)[1]*.05, #start with 5% of our dataset, small of a dataset
+                   replace = FALSE)# We don't want duplicate samples
+
+str(test_rows)
+
+
+
 ```
 
-Create test, tune and training sets 
+
 ```{r}
 
+# Partition the data between training and test sets using the row numbers the
+
+census_train = census_factors[-test_rows,]
+census_test = census_factors[test_rows,]
+
+# Check the output.
+str(census_train)
+str(census_test)
+
 ```
 
-Calculate the initial mtry level 
+Calculate the initial mtry (number of variables) level 
 ```{r}
+dim(census_train)
 
+mytry_tune <- function(x){
+  xx <- dim(x)[2]-1
+  sqrt(xx)
+}
+       
+mytry_tune(census)
+
+str(census_train)
 ```
+optimal number of variables = 3.74, so we can round up to 4
 
 Run the initial RF model with 500 trees 
 ```{r}
 
+set.seed(2023)	
+census_RF = randomForest(as.factor(income)~.,         
+                            census_train,    
+                            ntree = 500,        
+                            mtry = 4,         
+                            replace = TRUE,     
+                            sampsize = 500,     
+                            nodesize = 5,    
+                            importance = TRUE,   
+                            proximity = FALSE,   
+                            norm.votes = TRUE,   
+                            do.trace = TRUE,     
+                            keep.forest = TRUE, 
+                            keep.inbag = TRUE)
+
+
+
+
+census_RF
+
+#positive class is less than or equal to 50K = 0.05 percent classification error
+# negative class is greater than 50K = 44.8 percent classification error 
+#14.53 out of bag error (not terrible could be better)
 ```
 
-
 Using the training and tune datasets tune the model in consideration of the number
-of trees, the number of variables to sample and the sample size that optimize the model
+of trees, the number of variables to sample, and the sample size that optimize the model
 output. 
+
 ```{r}
+
+View(as.data.frame(census_RF$err.rate))
+
+err.rate <- as.data.frame(census_RF$err.rate)
+
+View(err.rate)
+
+
+census_RF_error = data.frame(1:nrow(census_RF$err.rate),
+                                census_RF$err.rate)
+
+View(census_RF_error)
+
+
+
+colnames(census_RF_error) = c("Number of Trees", "Out of the Box",
+                                 "Income <=50K", "Income >50K")
+
+# Add another variable that measures the difference between the error rates, in
+# some situations we would want to minimize this but need to use caution because
+# it could be that the differences are small but that both errors are really high,
+# just another point to track. 
+
+census_RF_error$Diff <- census_RF_error$`Income >50K`-census_RF_error$`Income <=50K`
+
+View(census_RF_error)
+
+
+library(plotly)
+
+#rm(fig) # do not run this it will remove everything after it runs
+fig1 <- plot_ly(x=census_RF_error$`Number of Trees`, y=census_RF_error$Diff,name="Diff", type = 'scatter', mode = 'lines')
+fig2 <- fig1 %>% add_trace(y=census_RF_error$`Out of the Box`, name="OOB_Er")
+fig3 <- fig2 %>% add_trace(y=census_RF_error$`Income <=50K`, name="Income <=50k")
+fig4 <- fig3 %>% add_trace(y=census_RF_error$`Income >50K`, name="Income >50K")
+
+fig1 
+fig2
+fig3
+fig4
+
+# not much change after about 200 to 300, takes about this many trees for it to learn 
+
+View(census_RF_error)
+
+set.seed(2023)	
+census_RF_2 = randomForest(as.factor(income)~.,         
+                            census_train,    
+                            ntree = 300,  # graph demonstrates that this is the optimal number of trees, however we know that error decrease is minimal when the number of trees are changed      
+                            mtry = 9,       # experimented with (trial and error) many times 9-10 gives you optimal error rate
+                            replace = TRUE,     
+                            sampsize = 1000, #experimented with many times to find the optimal error rate     
+                            nodesize = 5,    
+                            importance = TRUE,   
+                            proximity = FALSE,   
+                            norm.votes = TRUE,   
+                            do.trace = TRUE,     
+                            keep.forest = TRUE, 
+                            keep.inbag = TRUE)
+
+
+
+
+
+census_RF_2
+
+# error decrease is very minimal when you only change the number of trees so increasing the number of variables and sample can help increase the complexity and reduce the negative class
+
+
+census_RF$confusion
+census_RF_2$confusion
+
+
 
 ```
 
 Once a final model has been selected, evaluate the model using the test dataset
+
 ```{r}
 
-```
+set.seed(2023)	
+census_RF_final = randomForest(as.factor(income)~.,         
+                            census_test,    
+                            ntree = 300, #optimal number of trees used here found on previous chunk     
+                            mtry = 9,    #optimal number of variables      
+                            replace = TRUE,     
+                            sampsize = 1000,  #optimal sample size  
+                            nodesize = 5,    
+                            importance = TRUE,   
+                            proximity = FALSE,   
+                            norm.votes = TRUE,   
+                            do.trace = TRUE,     
+                            keep.forest = TRUE, 
+                            keep.inbag = TRUE)
 
+census_RF_final
+# OOB = 16.4
+#positive = 0.077 % classification error
+# negative = 0.46 % classification error
+
+```
 
 Summarize your findings as compared to the C5.0 model from last week. Think about the
 time the model took to train, the model evaluation output and if the patterns generally 
 between the two models are the same or different. What did you learn about the models or
 the data along the way? 
+
 ```{r}
 
 ```
+
+The time it took the model to train for the Random Forest model compared to the c5.0 model last week is significantly less and this can be attributed to model complexity. The caret model is likely more complex than the random forest model, causing it to run a lot longer. The overall error rates are quite similar (16.85 and 16.09) with the random forest having less of an error rate. This does not mean that the caret model is necessarily worse, it just may be better to use in a different context. In terms of determining salary, having high number of false positives is not ideal, so the caret model would not be best suited for this task. However, context is important; if we are discussing something like a breast cancer screening, having a high number of false positives is better than having a high number of false negatives. Overall, I learned how to play around with the hyperparameters of the random forest model to see how to optimize the model. Learning about how to find the ideal number of variables (mtry) and trees was interesting and I enjoyed being able to picture it with the visualization of the four variables. I feel like optimizing the random forest model is a lot more intuitive or was maybe simpler because we know which hyperparameters to focus on. With traincontrol/caret, I found it hard finding which hyperparameters would cause any change because there were so many, so my model just got worse after manipulating some of them. I changed the hyperparameters in the prior lab sort of haphazardly, so nothing really came of it. Now that I knew exactly what I was changing and why, I got results that actually helped the model improve, which is very interesting.
+

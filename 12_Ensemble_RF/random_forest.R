@@ -67,13 +67,16 @@ randomForest(formula,             #<- A formula to solve for when using random f
 # Let's run the random forest on our pregnancy data.
 # Let's subset a sample of 200 data points from our data, which we can 
 # use to test out the quality of our model.  
+library(rio)
+library(tidyverse)
 str(pregnancy)
 # First create a vector of numbers we'll sample.
-pregnancy = import("pregnancy.csv", check.names = TRUE, stringsAsFactors = FALSE)
-pregnancy_factors = as.data.frame(apply(pregnancy,                 #<- the data set to apply the function to
+pregnancy = import("data/pregnancy.csv", check.names = TRUE, stringsAsFactors = FALSE)
+pregnancy_factors = as.tibble(apply(pregnancy,                 #<- the data set to apply the function to
                           2,                         #<- for each column
                           function(x) as.factor(x)))  #<- change each variable to factor
 str(pregnancy_factors)
+View(pregnancy_factors)
 
 sample_rows = 1:nrow(pregnancy_factors)
 sample_rows
@@ -124,7 +127,7 @@ mytry_tune(pregnancy)
 str(pregnancy_train)
        
 set.seed(2023)	
-pregnancy_RF = randomForest(PREGNANT~.,          #<- Formula: response variable ~ predictors.
+pregnancy_RF = randomForest(as.factor(PREGNANT)~.,          #<- Formula: response variable ~ predictors.
                             #   The period means 'use all other variables in the data'.
                             pregnancy_train,     #<- A data frame with the variables to be used.
                             #y = NULL,           #<- A response vector. This is unnecessary because we're specifying a response formula.
@@ -153,6 +156,9 @@ pregnancy_RF = randomForest(PREGNANT~.,          #<- Formula: response variable 
 
 # Look at the output of the random forest.
 pregnancy_RF
+
+# this gives you the error rate and you want the one with the positive class, but it is not doing too great right now (40 percent error)
+
 
 #==================================================================================
 
@@ -272,14 +278,14 @@ View(pregnancy_RF_error)
 
 library(plotly)
 
-rm(fig)
+rm(fig) # do not run this it will remove everythign after it runs
 fig <- plot_ly(x=pregnancy_RF_error$`Number of Trees`, y=pregnancy_RF_error$Diff,name="Diff", type = 'scatter', mode = 'lines')
 fig <- fig %>% add_trace(y=pregnancy_RF_error$`Out of the Box`, name="OOB_Er")
 fig <- fig %>% add_trace(y=pregnancy_RF_error$`Not Pregnant`, name="Not Pregnant")
 fig <- fig %>% add_trace(y=pregnancy_RF_error$Pregnant, name="Pregnant")
 
 fig
-
+# it understands the not pregnant class really well, the pregnant class has a lot more volatility. it stabilizes before 600, so we do not really need more, we do not need more than 350-400 because that is when it begins to stabilize. 
 #==================================================================================
 
 #### Optimize the random forest model ####
@@ -298,8 +304,11 @@ View(pregnancy_RF_error)
 #### Optimize the random forest model ####
 
 # Let's create a random forest model with 77 trees.
+#reducing the number of trees to put more information in it and improve the error rate of the positive class
+#why wouldn't we use all the variables? learn one portion of the dataset really well which works better than a model that surface level knows ALL the varibles 
+
 set.seed(2022)	
-pregnancy_RF_2 = randomForest(PREGNANT~.,          #<- formula, response variable ~ predictors.
+pregnancy_RF_2 = randomForest(as.factor(PREGNANT)~.,          #<- formula, response variable ~ predictors.
                               #   the period means 'use all other variables in the data'.
                               pregnancy_train,     #<- A data frame with variables to be used.
                               #y = NULL,           #<- A response vector. This is unnecessary because we're specifying a response formula.
@@ -330,6 +339,8 @@ pregnancy_RF_2 = randomForest(PREGNANT~.,          #<- formula, response variabl
 # and the associated total error rates.
 pregnancy_RF$confusion
 pregnancy_RF_2$confusion
+
+# here we sacrifice the error fo the negative class to improve the positive class, however the positive class is signficantly better 
 
 # The second model is better, we are classifying more 1s as 1s. Let's see how well it 
 # performs on our test data. To do that we'll use the predict() function
